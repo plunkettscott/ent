@@ -8,8 +8,10 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/item"
 	"entgo.io/ent/schema/field"
@@ -20,6 +22,7 @@ type ItemCreate struct {
 	config
 	mutation *ItemMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetID sets the "id" field.
@@ -128,6 +131,7 @@ func (ic *ItemCreate) createSpec() (*Item, *sqlgraph.CreateSpec) {
 			},
 		}
 	)
+	_spec.OnConflict = ic.conflict
 	if id, ok := ic.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -135,10 +139,84 @@ func (ic *ItemCreate) createSpec() (*Item, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Item.Create().
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//      Exec(ctx)
+//
+func (ic *ItemCreate) OnConflict(opts ...sql.ConflictOption) *ItemUpsertOne {
+	ic.conflict = opts
+	return &ItemUpsertOne{
+		create: ic,
+	}
+}
+
+type (
+	// ItemUpsertOne is the builder for "upsert"-ing
+	//  one Item node.
+	ItemUpsertOne struct {
+		create *ItemCreate
+	}
+
+	// ItemUpsert is the "OnConflict" setter.
+	ItemUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// Update allows overriding fields `UPDATE` values. See the ItemCreate.OnConflict
+// documentation for more info.
+func (u *ItemUpsertOne) Update(set func(*ItemUpsert)) *ItemUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&ItemUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *ItemUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for ItemCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *ItemUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *ItemUpsertOne) ID(ctx context.Context) (id string, err error) {
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *ItemUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // ItemCreateBulk is the builder for creating many Item entities in bulk.
 type ItemCreateBulk struct {
 	config
 	builders []*ItemCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the Item entities in the database.
@@ -163,8 +241,10 @@ func (icb *ItemCreateBulk) Save(ctx context.Context) ([]*Item, error) {
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, icb.builders[i+1].mutation)
 				} else {
+					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = icb.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, icb.driver, &sqlgraph.BatchCreateSpec{Nodes: specs}); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, icb.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{err.Error(), err}
 						}
@@ -209,6 +289,59 @@ func (icb *ItemCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (icb *ItemCreateBulk) ExecX(ctx context.Context) {
 	if err := icb.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Item.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//      Exec(ctx)
+//
+func (icb *ItemCreateBulk) OnConflict(opts ...sql.ConflictOption) *ItemUpsertBulk {
+	icb.conflict = opts
+	return &ItemUpsertBulk{
+		create: icb,
+	}
+}
+
+// ItemUpsertBulk is the builder for "upsert"-ing
+//  a bulk of Item nodes.
+type ItemUpsertBulk struct {
+	create *ItemCreateBulk
+}
+
+// Update allows overriding fields `UPDATE` values. See the ItemCreateBulk.OnConflict
+// documentation for more info.
+func (u *ItemUpsertBulk) Update(set func(*ItemUpsert)) *ItemUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&ItemUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *ItemUpsertBulk) Exec(ctx context.Context) error {
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the ItemCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for ItemCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *ItemUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

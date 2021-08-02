@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/card"
 	"entgo.io/ent/entc/integration/ent/file"
@@ -25,6 +26,7 @@ type UserCreate struct {
 	config
 	mutation *UserMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetOptionalInt sets the "optional_int" field.
@@ -468,6 +470,7 @@ func (uc *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			},
 		}
 	)
+	_spec.OnConflict = uc.conflict
 	if value, ok := uc.mutation.OptionalInt(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
 			Type:   field.TypeInt,
@@ -762,10 +765,246 @@ func (uc *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.User.Create().
+//		SetOptionalInt(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//      // Override some of the fields with custom
+//      // update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetOptionalInt(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (uc *UserCreate) OnConflict(opts ...sql.ConflictOption) *UserUpsertOne {
+	uc.conflict = opts
+	return &UserUpsertOne{
+		create: uc,
+	}
+}
+
+type (
+	// UserUpsertOne is the builder for "upsert"-ing
+	//  one User node.
+	UserUpsertOne struct {
+		create *UserCreate
+	}
+
+	// UserUpsert is the "OnConflict" setter.
+	UserUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetOptionalInt sets the "optional_int" field.
+func (u *UserUpsert) SetOptionalInt(v int) *UserUpsert {
+	u.Set(user.FieldOptionalInt, v)
+	return u
+}
+
+// SetNewOptionalInt sets the "optional_int" field to the value that was provided on create.
+func (u *UserUpsert) SetNewOptionalInt() *UserUpsert {
+	u.SetExcluded(user.FieldOptionalInt)
+	return u
+}
+
+// ClearOptionalInt clears the value of the "optional_int" field.
+func (u *UserUpsert) ClearOptionalInt() *UserUpsert {
+	u.SetNull(user.FieldOptionalInt)
+	return u
+}
+
+// SetAge sets the "age" field.
+func (u *UserUpsert) SetAge(v int) *UserUpsert {
+	u.Set(user.FieldAge, v)
+	return u
+}
+
+// SetNewAge sets the "age" field to the value that was provided on create.
+func (u *UserUpsert) SetNewAge() *UserUpsert {
+	u.SetExcluded(user.FieldAge)
+	return u
+}
+
+// SetName sets the "name" field.
+func (u *UserUpsert) SetName(v string) *UserUpsert {
+	u.Set(user.FieldName, v)
+	return u
+}
+
+// SetNewName sets the "name" field to the value that was provided on create.
+func (u *UserUpsert) SetNewName() *UserUpsert {
+	u.SetExcluded(user.FieldName)
+	return u
+}
+
+// SetLast sets the "last" field.
+func (u *UserUpsert) SetLast(v string) *UserUpsert {
+	u.Set(user.FieldLast, v)
+	return u
+}
+
+// SetNewLast sets the "last" field to the value that was provided on create.
+func (u *UserUpsert) SetNewLast() *UserUpsert {
+	u.SetExcluded(user.FieldLast)
+	return u
+}
+
+// SetNickname sets the "nickname" field.
+func (u *UserUpsert) SetNickname(v string) *UserUpsert {
+	u.Set(user.FieldNickname, v)
+	return u
+}
+
+// SetNewNickname sets the "nickname" field to the value that was provided on create.
+func (u *UserUpsert) SetNewNickname() *UserUpsert {
+	u.SetExcluded(user.FieldNickname)
+	return u
+}
+
+// ClearNickname clears the value of the "nickname" field.
+func (u *UserUpsert) ClearNickname() *UserUpsert {
+	u.SetNull(user.FieldNickname)
+	return u
+}
+
+// SetAddress sets the "address" field.
+func (u *UserUpsert) SetAddress(v string) *UserUpsert {
+	u.Set(user.FieldAddress, v)
+	return u
+}
+
+// SetNewAddress sets the "address" field to the value that was provided on create.
+func (u *UserUpsert) SetNewAddress() *UserUpsert {
+	u.SetExcluded(user.FieldAddress)
+	return u
+}
+
+// ClearAddress clears the value of the "address" field.
+func (u *UserUpsert) ClearAddress() *UserUpsert {
+	u.SetNull(user.FieldAddress)
+	return u
+}
+
+// SetPhone sets the "phone" field.
+func (u *UserUpsert) SetPhone(v string) *UserUpsert {
+	u.Set(user.FieldPhone, v)
+	return u
+}
+
+// SetNewPhone sets the "phone" field to the value that was provided on create.
+func (u *UserUpsert) SetNewPhone() *UserUpsert {
+	u.SetExcluded(user.FieldPhone)
+	return u
+}
+
+// ClearPhone clears the value of the "phone" field.
+func (u *UserUpsert) ClearPhone() *UserUpsert {
+	u.SetNull(user.FieldPhone)
+	return u
+}
+
+// SetPassword sets the "password" field.
+func (u *UserUpsert) SetPassword(v string) *UserUpsert {
+	u.Set(user.FieldPassword, v)
+	return u
+}
+
+// SetNewPassword sets the "password" field to the value that was provided on create.
+func (u *UserUpsert) SetNewPassword() *UserUpsert {
+	u.SetExcluded(user.FieldPassword)
+	return u
+}
+
+// ClearPassword clears the value of the "password" field.
+func (u *UserUpsert) ClearPassword() *UserUpsert {
+	u.SetNull(user.FieldPassword)
+	return u
+}
+
+// SetRole sets the "role" field.
+func (u *UserUpsert) SetRole(v user.Role) *UserUpsert {
+	u.Set(user.FieldRole, v)
+	return u
+}
+
+// SetNewRole sets the "role" field to the value that was provided on create.
+func (u *UserUpsert) SetNewRole() *UserUpsert {
+	u.SetExcluded(user.FieldRole)
+	return u
+}
+
+// SetSSOCert sets the "SSOCert" field.
+func (u *UserUpsert) SetSSOCert(v string) *UserUpsert {
+	u.Set(user.FieldSSOCert, v)
+	return u
+}
+
+// SetNewSSOCert sets the "SSOCert" field to the value that was provided on create.
+func (u *UserUpsert) SetNewSSOCert() *UserUpsert {
+	u.SetExcluded(user.FieldSSOCert)
+	return u
+}
+
+// ClearSSOCert clears the value of the "SSOCert" field.
+func (u *UserUpsert) ClearSSOCert() *UserUpsert {
+	u.SetNull(user.FieldSSOCert)
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the UserCreate.OnConflict
+// documentation for more info.
+func (u *UserUpsertOne) Update(set func(*UserUpsert)) *UserUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&UserUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *UserUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for UserCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *UserUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *UserUpsertOne) ID(ctx context.Context) (id int, err error) {
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *UserUpsertOne) IDX(ctx context.Context) int {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // UserCreateBulk is the builder for creating many User entities in bulk.
 type UserCreateBulk struct {
 	config
 	builders []*UserCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the User entities in the database.
@@ -791,8 +1030,10 @@ func (ucb *UserCreateBulk) Save(ctx context.Context) ([]*User, error) {
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ucb.builders[i+1].mutation)
 				} else {
+					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = ucb.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, ucb.driver, &sqlgraph.BatchCreateSpec{Nodes: specs}); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, ucb.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{err.Error(), err}
 						}
@@ -803,8 +1044,10 @@ func (ucb *UserCreateBulk) Save(ctx context.Context) ([]*User, error) {
 				}
 				mutation.id = &nodes[i].ID
 				mutation.done = true
-				id := specs[i].ID.Value.(int64)
-				nodes[i].ID = int(id)
+				if specs[i].ID.Value != nil {
+					id := specs[i].ID.Value.(int64)
+					nodes[i].ID = int(id)
+				}
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {
@@ -839,6 +1082,64 @@ func (ucb *UserCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (ucb *UserCreateBulk) ExecX(ctx context.Context) {
 	if err := ucb.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.User.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetOptionalInt(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (ucb *UserCreateBulk) OnConflict(opts ...sql.ConflictOption) *UserUpsertBulk {
+	ucb.conflict = opts
+	return &UserUpsertBulk{
+		create: ucb,
+	}
+}
+
+// UserUpsertBulk is the builder for "upsert"-ing
+//  a bulk of User nodes.
+type UserUpsertBulk struct {
+	create *UserCreateBulk
+}
+
+// Update allows overriding fields `UPDATE` values. See the UserCreateBulk.OnConflict
+// documentation for more info.
+func (u *UserUpsertBulk) Update(set func(*UserUpsert)) *UserUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&UserUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *UserUpsertBulk) Exec(ctx context.Context) error {
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the UserCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for UserCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *UserUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/file"
 	"entgo.io/ent/entc/integration/ent/group"
@@ -25,6 +26,7 @@ type GroupCreate struct {
 	config
 	mutation *GroupMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetActive sets the "active" field.
@@ -274,6 +276,7 @@ func (gc *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 			},
 		}
 	)
+	_spec.OnConflict = gc.conflict
 	if value, ok := gc.mutation.Active(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
 			Type:   field.TypeBool,
@@ -394,10 +397,162 @@ func (gc *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Group.Create().
+//		SetActive(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//      // Override some of the fields with custom
+//      // update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetActive(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (gc *GroupCreate) OnConflict(opts ...sql.ConflictOption) *GroupUpsertOne {
+	gc.conflict = opts
+	return &GroupUpsertOne{
+		create: gc,
+	}
+}
+
+type (
+	// GroupUpsertOne is the builder for "upsert"-ing
+	//  one Group node.
+	GroupUpsertOne struct {
+		create *GroupCreate
+	}
+
+	// GroupUpsert is the "OnConflict" setter.
+	GroupUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetActive sets the "active" field.
+func (u *GroupUpsert) SetActive(v bool) *GroupUpsert {
+	u.Set(group.FieldActive, v)
+	return u
+}
+
+// SetNewActive sets the "active" field to the value that was provided on create.
+func (u *GroupUpsert) SetNewActive() *GroupUpsert {
+	u.SetExcluded(group.FieldActive)
+	return u
+}
+
+// SetExpire sets the "expire" field.
+func (u *GroupUpsert) SetExpire(v time.Time) *GroupUpsert {
+	u.Set(group.FieldExpire, v)
+	return u
+}
+
+// SetNewExpire sets the "expire" field to the value that was provided on create.
+func (u *GroupUpsert) SetNewExpire() *GroupUpsert {
+	u.SetExcluded(group.FieldExpire)
+	return u
+}
+
+// SetType sets the "type" field.
+func (u *GroupUpsert) SetType(v string) *GroupUpsert {
+	u.Set(group.FieldType, v)
+	return u
+}
+
+// SetNewType sets the "type" field to the value that was provided on create.
+func (u *GroupUpsert) SetNewType() *GroupUpsert {
+	u.SetExcluded(group.FieldType)
+	return u
+}
+
+// ClearType clears the value of the "type" field.
+func (u *GroupUpsert) ClearType() *GroupUpsert {
+	u.SetNull(group.FieldType)
+	return u
+}
+
+// SetMaxUsers sets the "max_users" field.
+func (u *GroupUpsert) SetMaxUsers(v int) *GroupUpsert {
+	u.Set(group.FieldMaxUsers, v)
+	return u
+}
+
+// SetNewMaxUsers sets the "max_users" field to the value that was provided on create.
+func (u *GroupUpsert) SetNewMaxUsers() *GroupUpsert {
+	u.SetExcluded(group.FieldMaxUsers)
+	return u
+}
+
+// ClearMaxUsers clears the value of the "max_users" field.
+func (u *GroupUpsert) ClearMaxUsers() *GroupUpsert {
+	u.SetNull(group.FieldMaxUsers)
+	return u
+}
+
+// SetName sets the "name" field.
+func (u *GroupUpsert) SetName(v string) *GroupUpsert {
+	u.Set(group.FieldName, v)
+	return u
+}
+
+// SetNewName sets the "name" field to the value that was provided on create.
+func (u *GroupUpsert) SetNewName() *GroupUpsert {
+	u.SetExcluded(group.FieldName)
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the GroupCreate.OnConflict
+// documentation for more info.
+func (u *GroupUpsertOne) Update(set func(*GroupUpsert)) *GroupUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&GroupUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *GroupUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for GroupCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *GroupUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *GroupUpsertOne) ID(ctx context.Context) (id int, err error) {
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *GroupUpsertOne) IDX(ctx context.Context) int {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // GroupCreateBulk is the builder for creating many Group entities in bulk.
 type GroupCreateBulk struct {
 	config
 	builders []*GroupCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the Group entities in the database.
@@ -423,8 +578,10 @@ func (gcb *GroupCreateBulk) Save(ctx context.Context) ([]*Group, error) {
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, gcb.builders[i+1].mutation)
 				} else {
+					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = gcb.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, gcb.driver, &sqlgraph.BatchCreateSpec{Nodes: specs}); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, gcb.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{err.Error(), err}
 						}
@@ -435,8 +592,10 @@ func (gcb *GroupCreateBulk) Save(ctx context.Context) ([]*Group, error) {
 				}
 				mutation.id = &nodes[i].ID
 				mutation.done = true
-				id := specs[i].ID.Value.(int64)
-				nodes[i].ID = int(id)
+				if specs[i].ID.Value != nil {
+					id := specs[i].ID.Value.(int64)
+					nodes[i].ID = int(id)
+				}
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {
@@ -471,6 +630,64 @@ func (gcb *GroupCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (gcb *GroupCreateBulk) ExecX(ctx context.Context) {
 	if err := gcb.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Group.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetActive(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (gcb *GroupCreateBulk) OnConflict(opts ...sql.ConflictOption) *GroupUpsertBulk {
+	gcb.conflict = opts
+	return &GroupUpsertBulk{
+		create: gcb,
+	}
+}
+
+// GroupUpsertBulk is the builder for "upsert"-ing
+//  a bulk of Group nodes.
+type GroupUpsertBulk struct {
+	create *GroupCreateBulk
+}
+
+// Update allows overriding fields `UPDATE` values. See the GroupCreateBulk.OnConflict
+// documentation for more info.
+func (u *GroupUpsertBulk) Update(set func(*GroupUpsert)) *GroupUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&GroupUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *GroupUpsertBulk) Exec(ctx context.Context) error {
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the GroupCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for GroupCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *GroupUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

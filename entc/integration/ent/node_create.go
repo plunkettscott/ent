@@ -8,8 +8,10 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/node"
 	"entgo.io/ent/schema/field"
@@ -20,6 +22,7 @@ type NodeCreate struct {
 	config
 	mutation *NodeMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetValue sets the "value" field.
@@ -171,6 +174,7 @@ func (nc *NodeCreate) createSpec() (*Node, *sqlgraph.CreateSpec) {
 			},
 		}
 	)
+	_spec.OnConflict = nc.conflict
 	if value, ok := nc.mutation.Value(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
 			Type:   field.TypeInt,
@@ -221,10 +225,108 @@ func (nc *NodeCreate) createSpec() (*Node, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Node.Create().
+//		SetValue(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//      // Override some of the fields with custom
+//      // update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetValue(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (nc *NodeCreate) OnConflict(opts ...sql.ConflictOption) *NodeUpsertOne {
+	nc.conflict = opts
+	return &NodeUpsertOne{
+		create: nc,
+	}
+}
+
+type (
+	// NodeUpsertOne is the builder for "upsert"-ing
+	//  one Node node.
+	NodeUpsertOne struct {
+		create *NodeCreate
+	}
+
+	// NodeUpsert is the "OnConflict" setter.
+	NodeUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetValue sets the "value" field.
+func (u *NodeUpsert) SetValue(v int) *NodeUpsert {
+	u.Set(node.FieldValue, v)
+	return u
+}
+
+// SetNewValue sets the "value" field to the value that was provided on create.
+func (u *NodeUpsert) SetNewValue() *NodeUpsert {
+	u.SetExcluded(node.FieldValue)
+	return u
+}
+
+// ClearValue clears the value of the "value" field.
+func (u *NodeUpsert) ClearValue() *NodeUpsert {
+	u.SetNull(node.FieldValue)
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the NodeCreate.OnConflict
+// documentation for more info.
+func (u *NodeUpsertOne) Update(set func(*NodeUpsert)) *NodeUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&NodeUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *NodeUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for NodeCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *NodeUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *NodeUpsertOne) ID(ctx context.Context) (id int, err error) {
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *NodeUpsertOne) IDX(ctx context.Context) int {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // NodeCreateBulk is the builder for creating many Node entities in bulk.
 type NodeCreateBulk struct {
 	config
 	builders []*NodeCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the Node entities in the database.
@@ -249,8 +351,10 @@ func (ncb *NodeCreateBulk) Save(ctx context.Context) ([]*Node, error) {
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ncb.builders[i+1].mutation)
 				} else {
+					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = ncb.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, ncb.driver, &sqlgraph.BatchCreateSpec{Nodes: specs}); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, ncb.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{err.Error(), err}
 						}
@@ -261,8 +365,10 @@ func (ncb *NodeCreateBulk) Save(ctx context.Context) ([]*Node, error) {
 				}
 				mutation.id = &nodes[i].ID
 				mutation.done = true
-				id := specs[i].ID.Value.(int64)
-				nodes[i].ID = int(id)
+				if specs[i].ID.Value != nil {
+					id := specs[i].ID.Value.(int64)
+					nodes[i].ID = int(id)
+				}
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {
@@ -297,6 +403,64 @@ func (ncb *NodeCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (ncb *NodeCreateBulk) ExecX(ctx context.Context) {
 	if err := ncb.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Node.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetValue(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (ncb *NodeCreateBulk) OnConflict(opts ...sql.ConflictOption) *NodeUpsertBulk {
+	ncb.conflict = opts
+	return &NodeUpsertBulk{
+		create: ncb,
+	}
+}
+
+// NodeUpsertBulk is the builder for "upsert"-ing
+//  a bulk of Node nodes.
+type NodeUpsertBulk struct {
+	create *NodeCreateBulk
+}
+
+// Update allows overriding fields `UPDATE` values. See the NodeCreateBulk.OnConflict
+// documentation for more info.
+func (u *NodeUpsertBulk) Update(set func(*NodeUpsert)) *NodeUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&NodeUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *NodeUpsertBulk) Exec(ctx context.Context) error {
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the NodeCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for NodeCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *NodeUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

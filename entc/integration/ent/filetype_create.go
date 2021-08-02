@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/file"
 	"entgo.io/ent/entc/integration/ent/filetype"
@@ -22,6 +23,7 @@ type FileTypeCreate struct {
 	config
 	mutation *FileTypeMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetName sets the "name" field.
@@ -202,6 +204,7 @@ func (ftc *FileTypeCreate) createSpec() (*FileType, *sqlgraph.CreateSpec) {
 			},
 		}
 	)
+	_spec.OnConflict = ftc.conflict
 	if value, ok := ftc.mutation.Name(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
 			Type:   field.TypeString,
@@ -248,10 +251,126 @@ func (ftc *FileTypeCreate) createSpec() (*FileType, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.FileType.Create().
+//		SetName(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//      // Override some of the fields with custom
+//      // update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetName(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (ftc *FileTypeCreate) OnConflict(opts ...sql.ConflictOption) *FileTypeUpsertOne {
+	ftc.conflict = opts
+	return &FileTypeUpsertOne{
+		create: ftc,
+	}
+}
+
+type (
+	// FileTypeUpsertOne is the builder for "upsert"-ing
+	//  one FileType node.
+	FileTypeUpsertOne struct {
+		create *FileTypeCreate
+	}
+
+	// FileTypeUpsert is the "OnConflict" setter.
+	FileTypeUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetName sets the "name" field.
+func (u *FileTypeUpsert) SetName(v string) *FileTypeUpsert {
+	u.Set(filetype.FieldName, v)
+	return u
+}
+
+// SetNewName sets the "name" field to the value that was provided on create.
+func (u *FileTypeUpsert) SetNewName() *FileTypeUpsert {
+	u.SetExcluded(filetype.FieldName)
+	return u
+}
+
+// SetType sets the "type" field.
+func (u *FileTypeUpsert) SetType(v filetype.Type) *FileTypeUpsert {
+	u.Set(filetype.FieldType, v)
+	return u
+}
+
+// SetNewType sets the "type" field to the value that was provided on create.
+func (u *FileTypeUpsert) SetNewType() *FileTypeUpsert {
+	u.SetExcluded(filetype.FieldType)
+	return u
+}
+
+// SetState sets the "state" field.
+func (u *FileTypeUpsert) SetState(v filetype.State) *FileTypeUpsert {
+	u.Set(filetype.FieldState, v)
+	return u
+}
+
+// SetNewState sets the "state" field to the value that was provided on create.
+func (u *FileTypeUpsert) SetNewState() *FileTypeUpsert {
+	u.SetExcluded(filetype.FieldState)
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the FileTypeCreate.OnConflict
+// documentation for more info.
+func (u *FileTypeUpsertOne) Update(set func(*FileTypeUpsert)) *FileTypeUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&FileTypeUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *FileTypeUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for FileTypeCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *FileTypeUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *FileTypeUpsertOne) ID(ctx context.Context) (id int, err error) {
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *FileTypeUpsertOne) IDX(ctx context.Context) int {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // FileTypeCreateBulk is the builder for creating many FileType entities in bulk.
 type FileTypeCreateBulk struct {
 	config
 	builders []*FileTypeCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the FileType entities in the database.
@@ -277,8 +396,10 @@ func (ftcb *FileTypeCreateBulk) Save(ctx context.Context) ([]*FileType, error) {
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ftcb.builders[i+1].mutation)
 				} else {
+					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = ftcb.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, ftcb.driver, &sqlgraph.BatchCreateSpec{Nodes: specs}); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, ftcb.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{err.Error(), err}
 						}
@@ -289,8 +410,10 @@ func (ftcb *FileTypeCreateBulk) Save(ctx context.Context) ([]*FileType, error) {
 				}
 				mutation.id = &nodes[i].ID
 				mutation.done = true
-				id := specs[i].ID.Value.(int64)
-				nodes[i].ID = int(id)
+				if specs[i].ID.Value != nil {
+					id := specs[i].ID.Value.(int64)
+					nodes[i].ID = int(id)
+				}
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {
@@ -325,6 +448,64 @@ func (ftcb *FileTypeCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (ftcb *FileTypeCreateBulk) ExecX(ctx context.Context) {
 	if err := ftcb.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.FileType.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.UserUpsert) {
+//			SetName(v+v).
+//		}).
+//      Exec(ctx)
+//
+func (ftcb *FileTypeCreateBulk) OnConflict(opts ...sql.ConflictOption) *FileTypeUpsertBulk {
+	ftcb.conflict = opts
+	return &FileTypeUpsertBulk{
+		create: ftcb,
+	}
+}
+
+// FileTypeUpsertBulk is the builder for "upsert"-ing
+//  a bulk of FileType nodes.
+type FileTypeUpsertBulk struct {
+	create *FileTypeCreateBulk
+}
+
+// Update allows overriding fields `UPDATE` values. See the FileTypeCreateBulk.OnConflict
+// documentation for more info.
+func (u *FileTypeUpsertBulk) Update(set func(*FileTypeUpsert)) *FileTypeUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&FileTypeUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// Exec executes the query.
+func (u *FileTypeUpsertBulk) Exec(ctx context.Context) error {
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the FileTypeCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for FileTypeCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *FileTypeUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
